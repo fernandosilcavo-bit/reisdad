@@ -6,21 +6,26 @@ html, body { margin: 0; padding: 0; height: 100%; font-family: system-ui, -apple
 #topbar { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 1px solid #ddd; background: #fafafa; }
 #topbar #end-turn-btn { margin-left: auto; padding: 6px 10px; }
 
-#map-wrapper { position: relative; overflow: hidden; }
-#svgMap { width: 100%; height: calc(100vh - 48px); border: none; background: #f8f8f8; }
+/* Reflow map to not sit under side panels */
+#map-wrapper { position: fixed; top: 48px; bottom: 0; left: 260px; right: 260px; overflow: hidden; background: #f8f8f8; }
+#svgMap { width: 100%; height: 100%; border: none; background: #f8f8f8; object-fit: contain; display: block; }
+#inline-svg-root { width: 100%; height: 100%; display: block; }
 
-#left-panel, #right-panel { position: fixed; top: 48px; bottom: 0; width: 260px; padding: 12px; overflow: auto; background: rgba(255,255,255,0.96); border-right: 1px solid #eee; }
+#left-panel, #right-panel { position: fixed; top: 48px; bottom: 0; width: 260px; padding: 12px; overflow: auto; background: rgba(255,255,255,0.96); border-right: 1px solid #eee; z-index: 2; }
 #left-panel { left: 0; }
 #right-panel { right: 0; border-right: none; border-left: 1px solid #eee; }
 #left-panel h3, #right-panel h3 { margin-top: 4px; margin-bottom: 8px; }
 #left-panel .actions { display: grid; grid-template-columns: 1fr; gap: 6px; margin-top: 8px; }
 #left-panel button:disabled { opacity: 0.5; cursor: not-allowed; }
 
-#overlay { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,0.35); }
+#overlay { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,0.35); z-index: 3; }
 #overlay.hidden { display: none; }
-#overlay .modal { background: white; padding: 16px; width: 320px; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); text-align: center; }
+#overlay .modal { background: white; padding: 16px; width: 360px; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); text-align: center; }
 #overlay .modal h2 { margin: 0 0 8px 0; }
 #overlay .modal p { margin: 0 0 12px 0; color: #555; }
+#overlay .modal .row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+#overlay select { width: 100%; padding: 6px; }
+#overlay .modal .actions { display: flex; gap: 8px; justify-content: center; margin-top: 8px; }
 
 /* In-SVG highlight via CSS classes applied to path elements */
 .province-hover { filter: brightness(1.15) saturate(1.1); }

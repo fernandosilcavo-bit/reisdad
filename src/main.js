@@ -23,6 +23,9 @@ async function init() {
 		onClick: (prov) => onProvinceClick(prov),
 	});
 
+	// Populate country dropdown
+	refreshCountrySelect();
+
 	// Global click cancels move mode
 	svgDoc.addEventListener('click', () => {
 		if (moveMode) {
@@ -39,7 +42,18 @@ async function init() {
 
 	ui.autoPickBtn.addEventListener('click', () => {
 		const ids = [...state.countryIdToCountry.keys()];
-		pickPlayer(randomItem(ids));
+		ui.countrySelect.value = randomItem(ids);
+	});
+
+	ui.startGameBtn.addEventListener('click', () => {
+		const picked = ui.countrySelect.value;
+		if (!picked) return;
+		pickPlayer(picked);
+	});
+
+	ui.cancelSelectBtn.addEventListener('click', () => {
+		// keep overlay; just clear selection
+		ui.countrySelect.value = '';
 	});
 
 	ui.saveBtn.addEventListener('click', () => {
@@ -96,6 +110,22 @@ async function init() {
 	updateTopbar(ui, state);
 }
 
+function refreshCountrySelect() {
+	const frag = document.createDocumentFragment();
+	const placeholder = document.createElement('option');
+	placeholder.value = '';
+	placeholder.textContent = 'Bir ülke seçin…';
+	frag.appendChild(placeholder);
+	for (const country of [...state.countryIdToCountry.values()].sort((a,b)=>a.name.localeCompare(b.name))) {
+		const opt = document.createElement('option');
+		opt.value = country.id;
+		opt.textContent = `${country.name} (${country.id})`;
+		frag.appendChild(opt);
+	}
+	ui.countrySelect.innerHTML = '';
+	ui.countrySelect.appendChild(frag);
+}
+
 function pickPlayer(countryId) {
 	state.playerCountryId = countryId;
 	state.isPlayerPicked = true;
@@ -106,8 +136,11 @@ function pickPlayer(countryId) {
 
 function onProvinceClick(prov) {
 	if (!state.isPlayerPicked) {
-		const ownerId = prov.ownerId || [...state.countryIdToCountry.keys()][0];
-		return pickPlayer(ownerId);
+		// Clicking a country in overlay stage fills dropdown for clarity
+		if (prov.ownerId) {
+			ui.countrySelect.value = prov.ownerId;
+		}
+		return;
 	}
 
 	if (moveMode && currentSelected && currentSelected.id !== prov.id) {
