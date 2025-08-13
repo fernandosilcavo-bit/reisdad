@@ -5,6 +5,8 @@ export function bindUI() {
 		turnInfo: document.getElementById('turn-info'),
 		playerInfo: document.getElementById('player-info'),
 		endTurnBtn: document.getElementById('end-turn-btn'),
+		saveBtn: document.getElementById('save-btn'),
+		loadBtn: document.getElementById('load-btn'),
 		overlay: document.getElementById('overlay'),
 		autoPickBtn: document.getElementById('auto-pick'),
 		selectedProvince: document.getElementById('selected-province'),
@@ -24,6 +26,7 @@ export function updateTopbar(ui, state) {
 	const player = state.playerCountryId ? state.countryIdToCountry.get(state.playerCountryId) : null;
 	ui.playerInfo.textContent = player ? `${player.name} • Altın: ${formatNumber(player.gold)}` : 'Seçim bekleniyor…';
 	ui.endTurnBtn.disabled = !player;
+	ui.saveBtn.disabled = !player;
 }
 
 export function showSelection(ui, state, province) {

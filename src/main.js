@@ -3,6 +3,7 @@ import { loadSvgAndExtractProvinces, wireProvinceInteractions } from './mapLoade
 import { bindUI, updateTopbar, showSelection, flashMessage } from './ui.js';
 import { bootstrapCountriesFromIso, randomizeNeutralOwners, recruit, improveEconomy, declareWar, moveArmy } from './logic.js';
 import { randomItem } from './utils.js';
+import { saveGame, loadGame, hasSave } from './storage.js';
 
 const ui = bindUI();
 const state = new GameState();
@@ -32,6 +33,7 @@ async function init() {
 
 	ui.endTurnBtn.addEventListener('click', () => {
 		state.advanceTurn();
+		saveGame(state);
 		updateTopbar(ui, state);
 	});
 
@@ -40,12 +42,26 @@ async function init() {
 		pickPlayer(randomItem(ids));
 	});
 
+	ui.saveBtn.addEventListener('click', () => {
+		if (saveGame(state)) flashMessage('Oyun kaydedildi');
+	});
+
+	ui.loadBtn.addEventListener('click', () => {
+		if (loadGame(state)) {
+			updateTopbar(ui, state);
+			if (currentSelected) showSelection(ui, state, currentSelected);
+			flashMessage('Kayıt yüklendi');
+		}
+	});
+
+	// Action handlers
 	ui.recruitBtn.addEventListener('click', () => {
 		if (!currentSelected) return;
 		const res = recruit(state, currentSelected.id);
 		if (!res.ok) return flashMessage(res.reason || 'İşlem başarısız');
 		showSelection(ui, state, currentSelected);
 		updateTopbar(ui, state);
+		saveGame(state);
 	});
 
 	ui.improveEconBtn.addEventListener('click', () => {
@@ -54,6 +70,7 @@ async function init() {
 		if (!res.ok) return flashMessage(res.reason || 'İşlem başarısız');
 		showSelection(ui, state, currentSelected);
 		updateTopbar(ui, state);
+		saveGame(state);
 	});
 
 	ui.moveModeBtn.addEventListener('click', () => {
@@ -69,7 +86,12 @@ async function init() {
 		const res = declareWar(state, ownerId);
 		if (!res.ok) return;
 		flashMessage('Savaş ilan edildi');
+		saveGame(state);
 	});
+
+	if (hasSave()) {
+		ui.loadBtn.classList.remove('hidden');
+	}
 
 	updateTopbar(ui, state);
 }
@@ -79,6 +101,7 @@ function pickPlayer(countryId) {
 	state.isPlayerPicked = true;
 	ui.overlay.classList.add('hidden');
 	updateTopbar(ui, state);
+	saveGame(state);
 }
 
 function onProvinceClick(prov) {
@@ -95,6 +118,7 @@ function onProvinceClick(prov) {
 		showSelection(ui, state, prov);
 		currentSelected = prov;
 		updateTopbar(ui, state);
+		saveGame(state);
 		return;
 	}
 
