@@ -7,16 +7,32 @@ export async function loadSvgAndExtractProvinces(objectEl) {
 		objectEl.addEventListener('error', reject, { once: true });
 	});
 
-	const svgDoc = objectEl.contentDocument;
-	const svgRoot = svgDoc && svgDoc.querySelector('svg');
+	let svgDoc = objectEl.contentDocument || null;
+	let svgRoot = svgDoc && svgDoc.querySelector && svgDoc.querySelector('svg');
+
+	// Fallback: fetch and inline the SVG into DOM if object embedding fails
+	if (!svgRoot) {
+		const dataUrl = objectEl.getAttribute('data') || 'map.svg';
+		const inline = await inlineSvgIntoPage(dataUrl, objectEl.parentElement || document.body);
+		svgRoot = inline;
+		svgDoc = svgRoot.ownerDocument;
+		// Hide the object to avoid duplicate visuals
+		objectEl.style.display = 'none';
+	}
+
 	if (!svgRoot) throw new Error('SVG kökü bulunamadı');
 
 	injectInteractionStyles(svgDoc, svgRoot);
 
-	// Provinces: use countries group if present, else all paths
+	// Provinces: prefer #countries group; else filter by paths having data-iso
 	const provinces = [];
 	const countryGroup = svgRoot.querySelector('#countries');
-	const pathList = countryGroup ? [...countryGroup.querySelectorAll('path')] : [...svgRoot.querySelectorAll('path')];
+	let pathList = [];
+	if (countryGroup) {
+		pathList = [...countryGroup.querySelectorAll('path')];
+	} else {
+		pathList = [...svgRoot.querySelectorAll('path[data-iso]')];
+	}
 
 	let counter = 0;
 	for (const path of pathList) {
@@ -36,7 +52,7 @@ export async function loadSvgAndExtractProvinces(objectEl) {
 			bboxes.set(p.id, { x: 0, y: 0, width: 0, height: 0 });
 		}
 	}
-	const inflate = 2;
+	const inflate = 1.5;
 	for (let i = 0; i < provinces.length; i++) {
 		for (let j = i + 1; j < provinces.length; j++) {
 			const a = bboxes.get(provinces[i].id);
@@ -50,6 +66,20 @@ export async function loadSvgAndExtractProvinces(objectEl) {
 	}
 
 	return { svgDoc, svgRoot, provinces };
+}
+
+async function inlineSvgIntoPage(url, mount) {
+	const res = await fetch(url, { cache: 'no-cache' });
+	const text = await res.text();
+	const parser = new DOMParser();
+	const doc = parser.parseFromString(text, 'image/svg+xml');
+	let svg = doc.documentElement;
+	if (!svg || svg.nodeName.toLowerCase() !== 'svg') return null;
+	// Import into current document
+	svg = document.importNode(svg, true);
+	svg.setAttribute('id', 'inline-svg-root');
+	mount.appendChild(svg);
+	return svg;
 }
 
 function injectInteractionStyles(svgDoc, svgRoot) {
