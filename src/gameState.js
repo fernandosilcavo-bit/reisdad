@@ -34,6 +34,11 @@ export class GameState {
 		this.provinceIdToProvince = new Map();
 		this.countryIdToCountry = new Map();
 		this.isoToProvinceIds = new Map(); // ISO code -> Set of province ids
+
+		// Diplomacy
+		this.relations = new Map(); // A -> (B -> score)
+		this.alliances = new Set(); // key A|B
+		this.truces = new Map(); // key A|B -> endTurn
 	}
 
 	addProvince(prov) {
@@ -46,6 +51,7 @@ export class GameState {
 
 	addCountry(country) {
 		this.countryIdToCountry.set(country.id, country);
+		if (!this.relations.has(country.id)) this.relations.set(country.id, new Map());
 	}
 
 	setOwner(provinceId, countryId) {
@@ -82,5 +88,37 @@ export class GameState {
 		this.turn += 1;
 		this.year += 1; // simple progression
 		this.collectIncome();
+		// expire truces
+		for (const [k, end] of [...this.truces.entries()]) {
+			if (this.turn >= end) this.truces.delete(k);
+		}
 	}
+
+	// Diplomacy helpers
+	getRelation(a, b) {
+		if (!this.relations.has(a)) this.relations.set(a, new Map());
+		return this.relations.get(a).get(b) ?? 0;
+	}
+
+	setRelation(a, b, val) {
+		if (!this.relations.has(a)) this.relations.set(a, new Map());
+		this.relations.get(a).set(b, Math.max(-100, Math.min(100, Math.round(val))));
+	}
+
+	adjustRelation(a, b, delta) {
+		this.setRelation(a, b, this.getRelation(a, b) + delta);
+		this.setRelation(b, a, this.getRelation(b, a) + delta);
+	}
+
+	allianceKey(a, b) { return a < b ? `${a}|${b}` : `${b}|${a}`; }
+
+	areAllied(a, b) { return this.alliances.has(this.allianceKey(a, b)); }
+
+	addAlliance(a, b) { this.alliances.add(this.allianceKey(a, b)); }
+
+	removeAlliance(a, b) { this.alliances.delete(this.allianceKey(a, b)); }
+
+	setTruce(a, b, endTurn) { this.truces.set(this.allianceKey(a, b), endTurn); }
+
+	hasTruce(a, b) { return this.truces.has(this.allianceKey(a, b)); }
 }

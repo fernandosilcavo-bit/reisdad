@@ -41,6 +41,7 @@ export function showSelection(ui, state, province) {
 		ui.improveEconBtn.disabled = true;
 		ui.moveModeBtn.disabled = true;
 		ui.declareWarBtn.disabled = true;
+		ui.diploView.innerHTML = '—';
 		return;
 	}
 	const owner = province.ownerId ? state.countryIdToCountry.get(province.ownerId) : null;
@@ -53,6 +54,15 @@ export function showSelection(ui, state, province) {
 	ui.improveEconBtn.disabled = !isPlayer;
 	ui.moveModeBtn.disabled = !isPlayer || province.army <= 0;
 	ui.declareWarBtn.disabled = !isPlayer;
+
+	updateDiplomacy(ui, state);
+}
+
+export function updateDiplomacy(ui, state) {
+	const player = state.playerCountryId && state.countryIdToCountry.get(state.playerCountryId);
+	if (!player) { ui.diploView.innerHTML = '—'; return; }
+	const neighborIds = []; // will be filled in main to avoid cycle
+	ui.diploView.dataset.needsPopulate = '1';
 }
 
 export function flashMessage(text) {

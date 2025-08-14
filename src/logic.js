@@ -15,7 +15,6 @@ export function bootstrapCountriesFromIso(state) {
 }
 
 export function randomizeNeutralOwners(state) {
-	// Any province without iso group gets assigned to a minor tag
 	const orphanProvs = [...state.provinceIdToProvince.values()].filter(p => !p.ownerId);
 	if (orphanProvs.length === 0) return;
 	const minorCount = Math.max(3, Math.min(12, Math.round(orphanProvs.length / 30)));
@@ -51,13 +50,58 @@ export function improveEconomy(state, provinceId) {
 	return { ok: true };
 }
 
+export function canDeclareWar(state, a, b) {
+	if (state.hasTruce(a, b)) return { ok: false, reason: 'Ateşkes var' };
+	return { ok: true };
+}
+
 export function declareWar(state, targetCountryId) {
 	const player = state.countryIdToCountry.get(state.playerCountryId);
 	const target = state.countryIdToCountry.get(targetCountryId);
 	if (!player || !target) return { ok: false };
+	const check = canDeclareWar(state, player.id, target.id);
+	if (!check.ok) return check;
 	player.atWarWith.add(target.id);
 	target.atWarWith.add(player.id);
+	state.adjustRelation(player.id, target.id, -40);
 	return { ok: true };
+}
+
+export function proposeAlliance(state, targetCountryId) {
+	const player = state.countryIdToCountry.get(state.playerCountryId);
+	if (!player) return { ok: false };
+	if (state.areAllied(player.id, targetCountryId)) return { ok: false, reason: 'Zaten müttefik' };
+	const rel = state.getRelation(player.id, targetCountryId);
+	if (rel < 20) return { ok: false, reason: 'İlişki yetersiz' };
+	state.addAlliance(player.id, targetCountryId);
+	state.adjustRelation(player.id, targetCountryId, +10);
+	return { ok: true };
+}
+
+export function makePeace(state, targetCountryId) {
+	const player = state.countryIdToCountry.get(state.playerCountryId);
+	if (!player) return { ok: false };
+	player.atWarWith.delete(targetCountryId);
+	const target = state.countryIdToCountry.get(targetCountryId);
+	if (target) target.atWarWith.delete(player.id);
+	state.setTruce(player.id, targetCountryId, state.turn + 10);
+	state.adjustRelation(player.id, targetCountryId, +10);
+	return { ok: true };
+}
+
+export function neighboringCountriesOf(state, countryId) {
+	const seen = new Set();
+	const neighbors = new Set();
+	for (const pid of state.countryIdToCountry.get(countryId)?.provinces || []) {
+		const p = state.provinceIdToProvince.get(pid);
+		for (const npid of p.neighbors) {
+			if (seen.has(npid)) continue;
+			seen.add(npid);
+			const np = state.provinceIdToProvince.get(npid);
+			if (np.ownerId && np.ownerId !== countryId) neighbors.add(np.ownerId);
+		}
+	}
+	return [...neighbors];
 }
 
 export function moveArmy(state, fromId, toId) {
@@ -68,13 +112,13 @@ export function moveArmy(state, fromId, toId) {
 	const owner = from.ownerId && state.countryIdToCountry.get(from.ownerId);
 	if (!owner || owner.id !== state.playerCountryId) return { ok: false };
 	if (from.army <= 0) return { ok: false };
-	// If same owner, merge
-	if (to.ownerId === from.ownerId) {
+	// Allied territory: allow transit and merge army
+	if (to.ownerId === from.ownerId || state.areAllied(owner.id, to.ownerId)) {
 		to.army += from.army;
 		from.army = 0;
 		return { ok: true };
 	}
-	// If enemy and at war, resolve battle
+	// Enemy?
 	const targetOwner = to.ownerId && state.countryIdToCountry.get(to.ownerId);
 	const atWar = targetOwner && (owner.atWarWith.has(targetOwner.id) || targetOwner.atWarWith.has(owner.id));
 	if (!atWar) return { ok: false, reason: 'Savaş yok' };

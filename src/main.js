@@ -1,7 +1,7 @@
 import { GameState } from './gameState.js';
 import { loadSvgAndExtractProvinces, wireProvinceInteractions } from './mapLoader.js';
-import { bindUI, updateTopbar, showSelection, flashMessage } from './ui.js';
-import { bootstrapCountriesFromIso, randomizeNeutralOwners, recruit, improveEconomy, declareWar, moveArmy } from './logic.js';
+import { bindUI, updateTopbar, showSelection, flashMessage, updateDiplomacy } from './ui.js';
+import { bootstrapCountriesFromIso, randomizeNeutralOwners, recruit, improveEconomy, declareWar, moveArmy, neighboringCountriesOf, proposeAlliance, makePeace, canDeclareWar } from './logic.js';
 import { randomItem } from './utils.js';
 import { saveGame, loadGame, hasSave } from './storage.js';
 
@@ -36,6 +36,7 @@ async function init() {
 		state.advanceTurn();
 		saveGame(state);
 		updateTopbar(ui, state);
+		populateDiplomacy();
 	});
 
 	ui.autoPickBtn.addEventListener('click', () => {
@@ -61,6 +62,7 @@ async function init() {
 		if (loadGame(state)) {
 			updateTopbar(ui, state);
 			if (currentSelected) showSelection(ui, state, currentSelected);
+			populateDiplomacy();
 			flashMessage('Kayıt yüklendi');
 		}
 	});
@@ -93,9 +95,12 @@ async function init() {
 		if (!currentSelected || !currentSelected.ownerId) return;
 		const ownerId = currentSelected.ownerId;
 		if (ownerId === state.playerCountryId) return;
+		const check = canDeclareWar(state, state.playerCountryId, ownerId);
+		if (!check.ok) return flashMessage(check.reason);
 		const res = declareWar(state, ownerId);
 		if (!res.ok) return;
 		flashMessage('Savaş ilan edildi');
+		populateDiplomacy();
 		saveGame(state);
 	});
 
@@ -104,6 +109,45 @@ async function init() {
 	}
 
 	updateTopbar(ui, state);
+	populateDiplomacy();
+}
+
+function populateDiplomacy() {
+	const player = state.playerCountryId && state.countryIdToCountry.get(state.playerCountryId);
+	if (!player) return;
+	const neighborIds = neighboringCountriesOf(state, player.id);
+	if (!neighborIds.length) { ui.diploView.innerHTML = '<div class="info">Komşu ülke yok</div>'; return; }
+	const container = document.createElement('div');
+	for (const id of neighborIds) {
+		const c = state.countryIdToCountry.get(id);
+		if (!c) continue;
+		const row = document.createElement('div');
+		row.style.display = 'grid';
+		row.style.gridTemplateColumns = '1fr auto auto auto';
+		row.style.gap = '6px';
+		const rel = state.getRelation(player.id, c.id);
+		row.innerHTML = `<div>${c.name} (${c.id})</div><div class="badge">İlişki: ${rel}</div>`;
+		const allyBtn = document.createElement('button'); allyBtn.textContent = state.areAllied(player.id, c.id) ? 'Müttefik' : 'İttifak Teklif Et'; allyBtn.disabled = state.areAllied(player.id, c.id);
+		const peaceBtn = document.createElement('button'); peaceBtn.textContent = 'Barış'; peaceBtn.disabled = !(player.atWarWith.has(c.id));
+		row.appendChild(allyBtn);
+		row.appendChild(peaceBtn);
+		allyBtn.addEventListener('click', () => {
+			const res = proposeAlliance(state, c.id);
+			if (!res.ok) return flashMessage(res.reason || 'Reddedildi');
+			populateDiplomacy();
+			saveGame(state);
+		});
+		peaceBtn.addEventListener('click', () => {
+			const res = makePeace(state, c.id);
+			if (!res.ok) return;
+			flashMessage('Barış yapıldı');
+			populateDiplomacy();
+			saveGame(state);
+		});
+		container.appendChild(row);
+	}
+	ui.diploView.innerHTML = '';
+	ui.diploView.appendChild(container);
 }
 
 function refreshCountrySelect() {
@@ -128,6 +172,7 @@ function pickPlayer(countryId) {
 	ui.overlay.classList.add('hidden');
 	updateTopbar(ui, state);
 	saveGame(state);
+	populateDiplomacy();
 }
 
 function applySelectionClass(prov, add) {
@@ -138,7 +183,6 @@ function applySelectionClass(prov, add) {
 function onProvinceClick(prov) {
 	if (!state.isPlayerPicked) {
 		if (prov.ownerId) ui.countrySelect.value = prov.ownerId;
-		// Show selection info in panel even before start
 		currentSelected = prov;
 		showSelection(ui, state, prov);
 		return;

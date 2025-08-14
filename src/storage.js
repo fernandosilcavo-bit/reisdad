@@ -13,6 +13,9 @@ export function saveGame(state) {
 			tech: c.tech,
 			atWarWith: [...c.atWarWith],
 		})),
+		relations: [...state.relations.entries()].map(([a, m]) => [a, [...m.entries()]]),
+		alliances: [...state.alliances],
+		truces: [...state.truces.entries()],
 		provinces: [...state.provinceIdToProvince.values()].map(p => ({
 			id: p.id,
 			ownerId: p.ownerId,
@@ -47,11 +50,15 @@ export function loadGame(state) {
 		});
 	}
 
+	// Diplomacy
+	state.relations = new Map((data.relations || []).map(([a, list]) => [a, new Map(list)]));
+	state.alliances = new Set(data.alliances || []);
+	state.truces = new Map(data.truces || []);
+
 	// Clear province ownership and apply saved props
 	for (const p of state.provinceIdToProvince.values()) {
 		p.army = 0;
-		// economy will be overwritten below
-		if (p.pathEl) p.pathEl.style.fill = '';
+		if (p.pathEls) for (const el of p.pathEls) if (el) el.style.fill = '';
 		p.ownerId = null;
 	}
 
