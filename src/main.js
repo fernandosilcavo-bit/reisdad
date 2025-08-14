@@ -23,10 +23,8 @@ async function init() {
 		onClick: (prov) => onProvinceClick(prov),
 	});
 
-	// Populate country dropdown
 	refreshCountrySelect();
 
-	// Global click cancels move mode
 	svgDoc.addEventListener('click', () => {
 		if (moveMode) {
 			moveMode = false;
@@ -52,7 +50,6 @@ async function init() {
 	});
 
 	ui.cancelSelectBtn.addEventListener('click', () => {
-		// keep overlay; just clear selection
 		ui.countrySelect.value = '';
 	});
 
@@ -68,7 +65,6 @@ async function init() {
 		}
 	});
 
-	// Action handlers
 	ui.recruitBtn.addEventListener('click', () => {
 		if (!currentSelected) return;
 		const res = recruit(state, currentSelected.id);
@@ -134,12 +130,17 @@ function pickPlayer(countryId) {
 	saveGame(state);
 }
 
+function applySelectionClass(prov, add) {
+	const method = add ? 'add' : 'remove';
+	for (const el of prov.pathEls) el.classList[method]('province-selected');
+}
+
 function onProvinceClick(prov) {
 	if (!state.isPlayerPicked) {
-		// Clicking a country in overlay stage fills dropdown for clarity
-		if (prov.ownerId) {
-			ui.countrySelect.value = prov.ownerId;
-		}
+		if (prov.ownerId) ui.countrySelect.value = prov.ownerId;
+		// Show selection info in panel even before start
+		currentSelected = prov;
+		showSelection(ui, state, prov);
 		return;
 	}
 
@@ -149,15 +150,17 @@ function onProvinceClick(prov) {
 		moveMode = false;
 		ui.moveModeBtn.textContent = 'Ordu Taşı';
 		showSelection(ui, state, prov);
+		applySelectionClass(currentSelected, false);
 		currentSelected = prov;
+		applySelectionClass(currentSelected, true);
 		updateTopbar(ui, state);
 		saveGame(state);
 		return;
 	}
 
-	if (currentSelected && currentSelected.pathEl) currentSelected.pathEl.classList.remove('province-selected');
+	if (currentSelected) applySelectionClass(currentSelected, false);
 	currentSelected = prov;
-	prov.pathEl.classList.add('province-selected');
+	applySelectionClass(currentSelected, true);
 	showSelection(ui, state, prov);
 }
 
