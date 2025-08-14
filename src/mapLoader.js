@@ -24,35 +24,48 @@ export async function loadSvgAndExtractProvinces(objectEl) {
 
 	injectInteractionStyles(svgDoc, svgRoot);
 
-	// Collect all paths and infer codes from attributes
-	const allPaths = [...svgRoot.querySelectorAll('path')];
-	const codeToPathEls = new Map();
-	const idRegex = /([A-Z]{2}[A-Z0-9]{1,3})/; // TR10, GRC, EL30, UKI3
-	for (const path of allPaths) {
-		if (path.closest('#graticule') || path.closest('#context')) continue;
-		let regionCode = (
-			path.getAttribute('data-iso') ||
-			path.getAttribute('data-nuts') ||
-			path.getAttribute('nuts_id') ||
-			path.getAttribute('NUTS_ID') ||
-			''
-		).trim().toUpperCase();
-		if (!regionCode) {
-			const pid = (path.getAttribute('id') || '').toUpperCase();
-			const m = pid.match(idRegex);
-			if (m) regionCode = m[1];
+	// Prefer explicit country group with ISO codes
+	const countryGroup = svgRoot.querySelector('#countries');
+	let codeToPathEls = new Map();
+	if (countryGroup) {
+		const cpaths = [...countryGroup.querySelectorAll('path[data-iso]')];
+		for (const path of cpaths) {
+			const code = (path.getAttribute('data-iso') || '').trim().toUpperCase();
+			if (!code) continue;
+			if (!codeToPathEls.has(code)) codeToPathEls.set(code, []);
+			codeToPathEls.get(code).push(path);
 		}
-		if (!regionCode) continue;
-		if (regionCode.length < 2 || regionCode.length > 5) continue;
-		if (!/^[A-Z]{2}/.test(regionCode)) continue;
-		if (!codeToPathEls.has(regionCode)) codeToPathEls.set(regionCode, []);
-		codeToPathEls.get(regionCode).push(path);
+	} else {
+		// Heuristic fallback when no countries group exists
+		const allPaths = [...svgRoot.querySelectorAll('path')];
+		const idRegex = /([A-Z]{2}[A-Z0-9]{1,3})/; // TR10, GRC, EL30, UKI3
+		for (const path of allPaths) {
+			if (path.closest('#graticule') || path.closest('#context')) continue;
+			let regionCode = (
+				path.getAttribute('data-iso') ||
+				path.getAttribute('data-nuts') ||
+				path.getAttribute('nuts_id') ||
+				path.getAttribute('NUTS_ID') ||
+				''
+			).trim().toUpperCase();
+			if (!regionCode) {
+				const pid = (path.getAttribute('id') || '').toUpperCase();
+				const m = pid.match(idRegex);
+				if (m) regionCode = m[1];
+			}
+			if (!regionCode) continue;
+			if (regionCode.length < 2 || regionCode.length > 5) continue;
+			if (!/^[A-Z]{2}/.test(regionCode)) continue;
+			if (!codeToPathEls.has(regionCode)) codeToPathEls.set(regionCode, []);
+			codeToPathEls.get(regionCode).push(path);
+		}
 	}
 
 	const provinces = [];
 	for (const [regionCode, els] of codeToPathEls.entries()) {
 		const uniqueEls = Array.from(new Set(els));
-		const isoRoot = /^[A-Z]{3}$/.test(regionCode) ? regionCode : regionCode.slice(0, 2);
+		// If using #countries, regionCode is a country ISO (e.g. RUS). Otherwise iso root derived earlier
+		const isoRoot = countryGroup ? regionCode : (/^[A-Z]{3}$/.test(regionCode) ? regionCode : regionCode.slice(0, 2));
 		const prov = new Province(regionCode, isoRoot, regionCode, uniqueEls[0], uniqueEls);
 		provinces.push(prov);
 	}
