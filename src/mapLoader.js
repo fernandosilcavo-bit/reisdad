@@ -24,44 +24,38 @@ export async function loadSvgAndExtractProvinces(objectEl) {
 
 	injectInteractionStyles(svgDoc, svgRoot);
 
-	// Provinces: prefer #countries group; else filter by paths having data-iso
-	const countryGroup = svgRoot.querySelector('#countries');
-	let rawPaths = [];
-	if (countryGroup) {
-		rawPaths = [...countryGroup.querySelectorAll('path')];
-	} else {
-		rawPaths = [...svgRoot.querySelectorAll('path[data-iso]')];
-	}
-
-	// Group by code (data-iso or normalized id like TR10…)
+	// Collect all paths and infer codes from attributes (data-nuts, nuts_id, NUTS_ID) or id using NUTS-like pattern
+	const allPaths = [...svgRoot.querySelectorAll('path')];
 	const codeToPathEls = new Map();
-	for (const path of rawPaths) {
-		const dataIso = (path.getAttribute('data-iso') || '').trim();
-		let code = dataIso;
+	const codeRegex = /([A-Z]{2}[A-Z0-9]{1,3})/; // e.g., TR10, EL30, UKI3, DE111
+	for (const path of allPaths) {
+		if (path.closest('#graticule') || path.closest('#context')) continue;
+		let code = (path.getAttribute('data-nuts') || path.getAttribute('nuts_id') || path.getAttribute('NUTS_ID') || '').trim().toUpperCase();
 		if (!code) {
-			// try to infer from id attribute like id="TR10_part1"
-			const pid = path.getAttribute('id') || '';
-			const m = pid.match(/([A-Z]{2}\d{1,3})/i);
-			if (m) code = m[1].toUpperCase();
+			const pid = (path.getAttribute('id') || '').toUpperCase();
+			const m = pid.match(codeRegex);
+			if (m) code = m[1];
 		}
-		if (!code) continue; // skip non-areas
+		if (!code) continue;
+		// Exclude pure country polygons like ISO-3 if present (we only want subunits/cities). Heuristic: code length 3-5 and starts with letters
+		if (code.length < 3 || code.length > 5) continue;
+		if (!/^[A-Z]{2}/.test(code)) continue;
 		if (!codeToPathEls.has(code)) codeToPathEls.set(code, []);
 		codeToPathEls.get(code).push(path);
 	}
 
 	const provinces = [];
 	for (const [code, els] of codeToPathEls.entries()) {
-		// Some maps may have duplicates; de-duplicate elements by reference
 		const uniqueEls = Array.from(new Set(els));
-		const prov = new Province(code, code, code, uniqueEls[0], uniqueEls);
+		const countryRoot = code.slice(0, 2);
+		const prov = new Province(code, countryRoot, code, uniqueEls[0], uniqueEls);
 		provinces.push(prov);
 	}
 
-	// Build neighbor graph via path bounding box proximity (cheap heuristic)
+	// Build neighbor graph via path bounding box union
 	const bboxes = new Map();
 	for (const p of provinces) {
 		try {
-			// merge bbox of multiparts by union
 			let union = null;
 			for (const el of p.pathEls) {
 				const bb = el.getBBox();
