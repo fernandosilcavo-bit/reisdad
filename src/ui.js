@@ -1,4 +1,5 @@
 import { formatNumber } from './utils.js';
+import { lookupCountryName, lookupRegionName } from './names.js';
 
 export function bindUI() {
 	return {
@@ -27,7 +28,8 @@ export function bindUI() {
 export function updateTopbar(ui, state) {
 	ui.turnInfo.textContent = `Tur: ${state.turn} • Yıl: ${state.year}`;
 	const player = state.playerCountryId ? state.countryIdToCountry.get(state.playerCountryId) : null;
-	ui.playerInfo.textContent = player ? `${player.name} • Altın: ${formatNumber(player.gold)}` : 'Seçim bekleniyor…';
+	const playerName = player ? lookupCountryName(player.id) : '';
+	ui.playerInfo.textContent = player ? `${playerName} • Altın: ${formatNumber(player.gold)}` : 'Seçim bekleniyor…';
 	ui.endTurnBtn.disabled = !player;
 	ui.saveBtn.disabled = !player;
 }
@@ -45,8 +47,10 @@ export function showSelection(ui, state, province) {
 		return;
 	}
 	const owner = province.ownerId ? state.countryIdToCountry.get(province.ownerId) : null;
-	ui.selectedProvince.textContent = province.name;
-	ui.selectedOwner.innerHTML = owner ? `${owner.name} <span class="badge">${owner.gold} altın</span>` : 'Bağımsız';
+	const regionName = lookupRegionName(province.id, province.isoCode);
+	ui.selectedProvince.textContent = regionName;
+	const ownerName = owner ? lookupCountryName(owner.id) : 'Bağımsız';
+	ui.selectedOwner.innerHTML = owner ? `${ownerName} <span class="badge">${owner.gold} altın</span>` : ownerName;
 	ui.selectedStats.textContent = `Ordu: ${formatNumber(province.army)} • Ekonomi: ${formatNumber(province.economy)}`;
 
 	const isPlayer = owner && owner.id === state.playerCountryId;
@@ -61,7 +65,7 @@ export function showSelection(ui, state, province) {
 export function updateDiplomacy(ui, state) {
 	const player = state.playerCountryId && state.countryIdToCountry.get(state.playerCountryId);
 	if (!player) { ui.diploView.innerHTML = '—'; return; }
-	const neighborIds = []; // will be filled in main to avoid cycle
+	const neighborIds = [];
 	ui.diploView.dataset.needsPopulate = '1';
 }
 
