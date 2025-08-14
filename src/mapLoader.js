@@ -30,30 +30,30 @@ export async function loadSvgAndExtractProvinces(objectEl) {
 	const idRegex = /([A-Z]{2}[A-Z0-9]{1,3})/; // TR10, GRC, EL30, UKI3
 	for (const path of allPaths) {
 		if (path.closest('#graticule') || path.closest('#context')) continue;
-		let code = (
+		let regionCode = (
 			path.getAttribute('data-iso') ||
 			path.getAttribute('data-nuts') ||
 			path.getAttribute('nuts_id') ||
 			path.getAttribute('NUTS_ID') ||
 			''
 		).trim().toUpperCase();
-		if (!code) {
+		if (!regionCode) {
 			const pid = (path.getAttribute('id') || '').toUpperCase();
 			const m = pid.match(idRegex);
-			if (m) code = m[1];
+			if (m) regionCode = m[1];
 		}
-		if (!code) continue;
-		// Accept codes 2-5 chars starting with letters only; avoid unrelated helpers
-		if (code.length < 2 || code.length > 5) continue;
-		if (!/^[A-Z]{2}/.test(code)) continue;
-		if (!codeToPathEls.has(code)) codeToPathEls.set(code, []);
-		codeToPathEls.get(code).push(path);
+		if (!regionCode) continue;
+		if (regionCode.length < 2 || regionCode.length > 5) continue;
+		if (!/^[A-Z]{2}/.test(regionCode)) continue;
+		if (!codeToPathEls.has(regionCode)) codeToPathEls.set(regionCode, []);
+		codeToPathEls.get(regionCode).push(path);
 	}
 
 	const provinces = [];
-	for (const [code, els] of codeToPathEls.entries()) {
+	for (const [regionCode, els] of codeToPathEls.entries()) {
 		const uniqueEls = Array.from(new Set(els));
-		const prov = new Province(code, code, code, uniqueEls[0], uniqueEls);
+		const isoRoot = /^[A-Z]{3}$/.test(regionCode) ? regionCode : regionCode.slice(0, 2);
+		const prov = new Province(regionCode, isoRoot, regionCode, uniqueEls[0], uniqueEls);
 		provinces.push(prov);
 	}
 

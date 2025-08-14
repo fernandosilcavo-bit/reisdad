@@ -134,20 +134,94 @@ function ensureLabelsLayer() {
 	}
 }
 
-function provinceCenter(prov) {
-	let union = null;
-	for (const el of prov.pathEls) {
-		let bb;
-		try { bb = el.getBBox(); } catch { continue; }
-		if (!union) union = { ...bb };
-		else union = {
-			x: Math.min(union.x, bb.x), y: Math.min(union.y, bb.y),
-			width: Math.max(union.x + union.width, bb.x + bb.width) - Math.min(union.x, bb.x),
-			height: Math.max(union.y + union.height, bb.y + bb.height) - Math.min(union.y, bb.y),
-		};
+function refreshCountrySelect() {
+	// Build a country list from province iso roots
+	const isoToCount = new Map();
+	for (const p of state.provinceIdToProvince.values()) {
+		if (!p.isoCode) continue;
+		isoToCount.set(p.isoCode, (isoToCount.get(p.isoCode) || 0) + 1);
 	}
-	if (!union) return { x: 0, y: 0 };
-	return { x: union.x + union.width / 2, y: union.y + union.height / 2 };
+	const isoList = [...isoToCount.keys()].sort();
+	const frag = document.createDocumentFragment();
+	const placeholder = document.createElement('option');
+	placeholder.value = '';
+	placeholder.textContent = 'Bir ülke seçin…';
+	frag.appendChild(placeholder);
+	for (const iso of isoList) {
+		const opt = document.createElement('option');
+		opt.value = iso;
+		opt.textContent = iso;
+		frag.appendChild(opt);
+	}
+	ui.countrySelect.innerHTML = '';
+	ui.countrySelect.appendChild(frag);
+}
+
+function pickPlayer(countryIso) {
+	state.playerCountryId = countryIso;
+	state.isPlayerPicked = true;
+	ui.overlay.classList.add('hidden');
+	updateTopbar(ui, state);
+	saveGame(state);
+	populateDiplomacy();
+}
+
+function applySelectionClass(prov, add) {
+	const method = add ? 'add' : 'remove';
+	for (const el of prov.pathEls) el.classList[method]('province-selected');
+}
+
+function onProvinceClick(prov) {
+	if (!state.isPlayerPicked) {
+		if (prov.isoCode) ui.countrySelect.value = prov.isoCode;
+		currentSelected = prov;
+		showSelection(ui, state, prov);
+		return;
+	}
+
+	if (moveMode && currentSelected && currentSelected.id !== prov.id) {
+		const res = moveArmy(state, currentSelected.id, prov.id);
+		if (!res.ok) flashMessage(res.reason || 'Taşıma başarısız');
+		disableMoveMode();
+		showSelection(ui, state, prov);
+		applySelectionClass(currentSelected, false);
+		currentSelected = prov;
+		applySelectionClass(currentSelected, true);
+		updateTopbar(ui, state);
+		aiTakeTurn(state);
+		renderArmyLabels();
+		saveGame(state);
+		return;
+	}
+
+	if (currentSelected) applySelectionClass(currentSelected, false);
+	currentSelected = prov;
+	applySelectionClass(currentSelected, true);
+	showSelection(ui, state, prov);
+	if (moveMode) highlightNeighbors(currentSelected);
+}
+
+function disableMoveMode() {
+	moveMode = false;
+	ui.moveModeBtn.textContent = 'Ordu Taşı';
+	clearNeighborHighlights();
+}
+
+function highlightNeighbors(prov) {
+	clearNeighborHighlights();
+	for (const nid of prov.neighbors) {
+		const p = state.provinceIdToProvince.get(nid);
+		for (const el of p.pathEls) el.classList.add('province-moveable');
+		highlightedNeighbors.add(nid);
+	}
+}
+
+function clearNeighborHighlights() {
+	for (const nid of highlightedNeighbors) {
+		const p = state.provinceIdToProvince.get(nid);
+		for (const el of p.pathEls) el.classList.remove('province-moveable');
+	}
+	highlightedNeighbors.clear();
 }
 
 function renderArmyLabels() {
@@ -179,27 +253,20 @@ function renderArmyLabels() {
 	}
 }
 
-function disableMoveMode() {
-	moveMode = false;
-	ui.moveModeBtn.textContent = 'Ordu Taşı';
-	clearNeighborHighlights();
-}
-
-function highlightNeighbors(prov) {
-	clearNeighborHighlights();
-	for (const nid of prov.neighbors) {
-		const p = state.provinceIdToProvince.get(nid);
-		for (const el of p.pathEls) el.classList.add('province-moveable');
-		highlightedNeighbors.add(nid);
+function provinceCenter(prov) {
+	let union = null;
+	for (const el of prov.pathEls) {
+		let bb;
+		try { bb = el.getBBox(); } catch { continue; }
+		if (!union) union = { ...bb };
+		else union = {
+			x: Math.min(union.x, bb.x), y: Math.min(union.y, bb.y),
+			width: Math.max(union.x + union.width, bb.x + bb.width) - Math.min(union.x, bb.x),
+			height: Math.max(union.y + union.height, bb.y + bb.height) - Math.min(union.y, bb.y),
+		};
 	}
-}
-
-function clearNeighborHighlights() {
-	for (const nid of highlightedNeighbors) {
-		const p = state.provinceIdToProvince.get(nid);
-		for (const el of p.pathEls) el.classList.remove('province-moveable');
-	}
-	highlightedNeighbors.clear();
+	if (!union) return { x: 0, y: 0 };
+	return { x: union.x + union.width / 2, y: union.y + union.height / 2 };
 }
 
 function populateDiplomacy() {
@@ -249,66 +316,6 @@ function populateDiplomacy() {
 	}
 	ui.diploView.innerHTML = '';
 	ui.diploView.appendChild(container);
-}
-
-function refreshCountrySelect() {
-	const frag = document.createDocumentFragment();
-	const placeholder = document.createElement('option');
-	placeholder.value = '';
-	placeholder.textContent = 'Bir ülke seçin…';
-	frag.appendChild(placeholder);
-	for (const country of [...state.countryIdToCountry.values()].sort((a,b)=>a.name.localeCompare(b.name))) {
-		const opt = document.createElement('option');
-		opt.value = country.id;
-		opt.textContent = `${country.name} (${country.id})`;
-		frag.appendChild(opt);
-	}
-	ui.countrySelect.innerHTML = '';
-	ui.countrySelect.appendChild(frag);
-}
-
-function pickPlayer(countryId) {
-	state.playerCountryId = countryId;
-	state.isPlayerPicked = true;
-	ui.overlay.classList.add('hidden');
-	updateTopbar(ui, state);
-	saveGame(state);
-	populateDiplomacy();
-}
-
-function applySelectionClass(prov, add) {
-	const method = add ? 'add' : 'remove';
-	for (const el of prov.pathEls) el.classList[method]('province-selected');
-}
-
-function onProvinceClick(prov) {
-	if (!state.isPlayerPicked) {
-		if (prov.ownerId) ui.countrySelect.value = prov.ownerId;
-		currentSelected = prov;
-		showSelection(ui, state, prov);
-		return;
-	}
-
-	if (moveMode && currentSelected && currentSelected.id !== prov.id) {
-		const res = moveArmy(state, currentSelected.id, prov.id);
-		if (!res.ok) flashMessage(res.reason || 'Taşıma başarısız');
-		disableMoveMode();
-		showSelection(ui, state, prov);
-		applySelectionClass(currentSelected, false);
-		currentSelected = prov;
-		applySelectionClass(currentSelected, true);
-		updateTopbar(ui, state);
-		aiTakeTurn(state);
-		renderArmyLabels();
-		saveGame(state);
-		return;
-	}
-
-	if (currentSelected) applySelectionClass(currentSelected, false);
-	currentSelected = prov;
-	applySelectionClass(currentSelected, true);
-	showSelection(ui, state, prov);
-	if (moveMode) highlightNeighbors(currentSelected);
 }
 
 init().catch(err => {
