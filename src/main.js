@@ -11,10 +11,14 @@ const state = new GameState();
 let currentSelected = null;
 let moveMode = false;
 let highlightedNeighbors = new Set();
+let svgRootRef = null;
+let labelsLayer = null;
 
 async function init() {
 	const { svgDoc, svgRoot, provinces } = await loadSvgAndExtractProvinces(ui.objectEl);
 	for (const p of provinces) state.addProvince(p);
+	svgRootRef = svgRoot;
+	ensureLabelsLayer();
 
 	bootstrapCountriesFromIso(state);
 	randomizeNeutralOwners(state);
@@ -26,6 +30,7 @@ async function init() {
 	});
 
 	refreshCountrySelect();
+	renderArmyLabels();
 
 	svgDoc.addEventListener('click', () => {
 		if (moveMode) {
@@ -36,6 +41,7 @@ async function init() {
 	ui.endTurnBtn.addEventListener('click', () => {
 		state.advanceTurn();
 		aiTakeTurn(state);
+		renderArmyLabels();
 		saveGame(state);
 		updateTopbar(ui, state);
 		populateDiplomacy();
@@ -63,6 +69,7 @@ async function init() {
 	ui.loadBtn.addEventListener('click', () => {
 		if (loadGame(state)) {
 			updateTopbar(ui, state);
+			renderArmyLabels();
 			if (currentSelected) showSelection(ui, state, currentSelected);
 			populateDiplomacy();
 			flashMessage('Kayıt yüklendi');
@@ -74,6 +81,7 @@ async function init() {
 		const res = recruit(state, currentSelected.id);
 		if (!res.ok) return flashMessage(res.reason || 'İşlem başarısız');
 		showSelection(ui, state, currentSelected);
+		renderArmyLabels();
 		updateTopbar(ui, state);
 		saveGame(state);
 	});
@@ -113,6 +121,62 @@ async function init() {
 
 	updateTopbar(ui, state);
 	populateDiplomacy();
+}
+
+function ensureLabelsLayer() {
+	if (!svgRootRef) return;
+	labelsLayer = svgRootRef.querySelector('#army-labels');
+	if (!labelsLayer) {
+		labelsLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+		labelsLayer.setAttribute('id', 'army-labels');
+		labelsLayer.setAttribute('pointer-events', 'none');
+		svgRootRef.appendChild(labelsLayer);
+	}
+}
+
+function provinceCenter(prov) {
+	let union = null;
+	for (const el of prov.pathEls) {
+		let bb;
+		try { bb = el.getBBox(); } catch { continue; }
+		if (!union) union = { ...bb };
+		else union = {
+			x: Math.min(union.x, bb.x), y: Math.min(union.y, bb.y),
+			width: Math.max(union.x + union.width, bb.x + bb.width) - Math.min(union.x, bb.x),
+			height: Math.max(union.y + union.height, bb.y + bb.height) - Math.min(union.y, bb.y),
+		};
+	}
+	if (!union) return { x: 0, y: 0 };
+	return { x: union.x + union.width / 2, y: union.y + union.height / 2 };
+}
+
+function renderArmyLabels() {
+	if (!labelsLayer) ensureLabelsLayer();
+	if (!labelsLayer) return;
+	const existing = new Set();
+	for (const prov of state.provinceIdToProvince.values()) {
+		const id = `label-${prov.id}`;
+		existing.add(id);
+		let t = labelsLayer.querySelector(`#${CSS.escape(id)}`);
+		const owner = prov.ownerId && state.countryIdToCountry.get(prov.ownerId);
+		if (!prov.army) {
+			if (t) t.remove();
+			continue;
+		}
+		const c = provinceCenter(prov);
+		if (!t) {
+			t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+			t.setAttribute('id', id);
+			t.setAttribute('text-anchor', 'middle');
+			t.setAttribute('dominant-baseline', 'middle');
+			t.setAttribute('style', 'font: 700 11px sans-serif; pointer-events:none; stroke:#000; stroke-width:2; paint-order: stroke fill;');
+			labelsLayer.appendChild(t);
+		}
+		t.setAttribute('x', String(c.x));
+		t.setAttribute('y', String(c.y));
+		t.setAttribute('fill', owner ? owner.color : '#333');
+		t.textContent = String(prov.army);
+	}
 }
 
 function disableMoveMode() {
@@ -235,6 +299,7 @@ function onProvinceClick(prov) {
 		applySelectionClass(currentSelected, true);
 		updateTopbar(ui, state);
 		aiTakeTurn(state);
+		renderArmyLabels();
 		saveGame(state);
 		return;
 	}
