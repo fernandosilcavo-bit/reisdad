@@ -1,14 +1,16 @@
 import { GameState } from './gameState.js';
 import { loadSvgAndExtractProvinces, wireProvinceInteractions } from './mapLoader.js';
-import { bindUI, updateTopbar, showSelection, flashMessage, updateDiplomacy } from './ui.js';
+import { bindUI, updateTopbar, showSelection, flashMessage } from './ui.js';
 import { bootstrapCountriesFromIso, randomizeNeutralOwners, recruit, improveEconomy, declareWar, moveArmy, neighboringCountriesOf, proposeAlliance, makePeace, canDeclareWar } from './logic.js';
 import { randomItem } from './utils.js';
 import { saveGame, loadGame, hasSave } from './storage.js';
+import { aiTakeTurn } from './ai.js';
 
 const ui = bindUI();
 const state = new GameState();
 let currentSelected = null;
 let moveMode = false;
+let highlightedNeighbors = new Set();
 
 async function init() {
 	const { svgDoc, svgRoot, provinces } = await loadSvgAndExtractProvinces(ui.objectEl);
@@ -27,13 +29,13 @@ async function init() {
 
 	svgDoc.addEventListener('click', () => {
 		if (moveMode) {
-			moveMode = false;
-			ui.moveModeBtn.textContent = 'Ordu Taşı';
+			disableMoveMode();
 		}
 	});
 
 	ui.endTurnBtn.addEventListener('click', () => {
 		state.advanceTurn();
+		aiTakeTurn(state);
 		saveGame(state);
 		updateTopbar(ui, state);
 		populateDiplomacy();
@@ -89,6 +91,7 @@ async function init() {
 		if (!currentSelected) return;
 		moveMode = !moveMode;
 		ui.moveModeBtn.textContent = moveMode ? 'Hedefe Tıkla' : 'Ordu Taşı';
+		if (moveMode) highlightNeighbors(currentSelected); else clearNeighborHighlights();
 	});
 
 	ui.declareWarBtn.addEventListener('click', () => {
@@ -112,6 +115,29 @@ async function init() {
 	populateDiplomacy();
 }
 
+function disableMoveMode() {
+	moveMode = false;
+	ui.moveModeBtn.textContent = 'Ordu Taşı';
+	clearNeighborHighlights();
+}
+
+function highlightNeighbors(prov) {
+	clearNeighborHighlights();
+	for (const nid of prov.neighbors) {
+		const p = state.provinceIdToProvince.get(nid);
+		for (const el of p.pathEls) el.classList.add('province-moveable');
+		highlightedNeighbors.add(nid);
+	}
+}
+
+function clearNeighborHighlights() {
+	for (const nid of highlightedNeighbors) {
+		const p = state.provinceIdToProvince.get(nid);
+		for (const el of p.pathEls) el.classList.remove('province-moveable');
+	}
+	highlightedNeighbors.clear();
+}
+
 function populateDiplomacy() {
 	const player = state.playerCountryId && state.countryIdToCountry.get(state.playerCountryId);
 	if (!player) return;
@@ -125,15 +151,26 @@ function populateDiplomacy() {
 		row.style.display = 'grid';
 		row.style.gridTemplateColumns = '1fr auto auto auto';
 		row.style.gap = '6px';
-		const rel = state.getRelation(player.id, c.id);
+		const rel = state.getRelation(state.playerCountryId, c.id);
 		row.innerHTML = `<div>${c.name} (${c.id})</div><div class="badge">İlişki: ${rel}</div>`;
-		const allyBtn = document.createElement('button'); allyBtn.textContent = state.areAllied(player.id, c.id) ? 'Müttefik' : 'İttifak Teklif Et'; allyBtn.disabled = state.areAllied(player.id, c.id);
+		const allyBtn = document.createElement('button'); allyBtn.textContent = state.areAllied(state.playerCountryId, c.id) ? 'Müttefik' : 'İttifak'; allyBtn.disabled = state.areAllied(state.playerCountryId, c.id);
+		const warBtn = document.createElement('button'); warBtn.textContent = 'Savaş'; warBtn.disabled = state.hasTruce(state.playerCountryId, c.id);
 		const peaceBtn = document.createElement('button'); peaceBtn.textContent = 'Barış'; peaceBtn.disabled = !(player.atWarWith.has(c.id));
 		row.appendChild(allyBtn);
+		row.appendChild(warBtn);
 		row.appendChild(peaceBtn);
 		allyBtn.addEventListener('click', () => {
 			const res = proposeAlliance(state, c.id);
 			if (!res.ok) return flashMessage(res.reason || 'Reddedildi');
+			populateDiplomacy();
+			saveGame(state);
+		});
+		warBtn.addEventListener('click', () => {
+			const check = canDeclareWar(state, state.playerCountryId, c.id);
+			if (!check.ok) return flashMessage(check.reason);
+			const res = declareWar(state, c.id);
+			if (!res.ok) return;
+			flashMessage('Savaş ilan edildi');
 			populateDiplomacy();
 			saveGame(state);
 		});
@@ -191,13 +228,13 @@ function onProvinceClick(prov) {
 	if (moveMode && currentSelected && currentSelected.id !== prov.id) {
 		const res = moveArmy(state, currentSelected.id, prov.id);
 		if (!res.ok) flashMessage(res.reason || 'Taşıma başarısız');
-		moveMode = false;
-		ui.moveModeBtn.textContent = 'Ordu Taşı';
+		disableMoveMode();
 		showSelection(ui, state, prov);
 		applySelectionClass(currentSelected, false);
 		currentSelected = prov;
 		applySelectionClass(currentSelected, true);
 		updateTopbar(ui, state);
+		aiTakeTurn(state);
 		saveGame(state);
 		return;
 	}
@@ -206,6 +243,7 @@ function onProvinceClick(prov) {
 	currentSelected = prov;
 	applySelectionClass(currentSelected, true);
 	showSelection(ui, state, prov);
+	if (moveMode) highlightNeighbors(currentSelected);
 }
 
 init().catch(err => {

@@ -32,8 +32,9 @@ export function recruit(state, provinceId) {
 	const owner = province.ownerId && state.countryIdToCountry.get(province.ownerId);
 	if (!owner) return { ok: false, reason: 'Sahip yok' };
 	if (owner.id !== state.playerCountryId) return { ok: false, reason: 'Size ait değil' };
-	const cost = 5;
-	if (owner.gold < cost) return { ok: false, reason: 'Yetersiz altın' };
+	const base = 5;
+	const cost = Math.max(base, Math.round(base * (1 + province.army * 0.1))); // daha çok asker, daha pahalı
+	if (owner.gold < cost) return { ok: false, reason: `Yetersiz altın (${cost})` };
 	owner.gold -= cost;
 	province.army += 1;
 	return { ok: true };
@@ -101,7 +102,7 @@ export function neighboringCountriesOf(state, countryId) {
 			if (np.ownerId && np.ownerId !== countryId) neighbors.add(np.ownerId);
 		}
 	}
-	return [...neighbors];
+	return [...neighbors].sort();
 }
 
 export function moveArmy(state, fromId, toId) {
