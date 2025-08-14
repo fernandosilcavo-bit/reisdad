@@ -25,21 +25,35 @@ export async function loadSvgAndExtractProvinces(objectEl) {
 	injectInteractionStyles(svgDoc, svgRoot);
 
 	// Provinces: prefer #countries group; else filter by paths having data-iso
-	const provinces = [];
 	const countryGroup = svgRoot.querySelector('#countries');
-	let pathList = [];
+	let rawPaths = [];
 	if (countryGroup) {
-		pathList = [...countryGroup.querySelectorAll('path')];
+		rawPaths = [...countryGroup.querySelectorAll('path')];
 	} else {
-		pathList = [...svgRoot.querySelectorAll('path[data-iso]')];
+		rawPaths = [...svgRoot.querySelectorAll('path[data-iso]')];
 	}
 
-	let counter = 0;
-	for (const path of pathList) {
-		const iso = path.getAttribute('data-iso') || null;
-		const id = path.id || `prov-${iso || 'p'}-${counter++}`;
-		const provName = iso ?? id;
-		const prov = new Province(id, iso, provName, path);
+	// Group by code (data-iso or normalized id like TR10…)
+	const codeToPathEls = new Map();
+	for (const path of rawPaths) {
+		const dataIso = (path.getAttribute('data-iso') || '').trim();
+		let code = dataIso;
+		if (!code) {
+			// try to infer from id attribute like id="TR10_part1"
+			const pid = path.getAttribute('id') || '';
+			const m = pid.match(/([A-Z]{2}\d{1,3})/i);
+			if (m) code = m[1].toUpperCase();
+		}
+		if (!code) continue; // skip non-areas
+		if (!codeToPathEls.has(code)) codeToPathEls.set(code, []);
+		codeToPathEls.get(code).push(path);
+	}
+
+	const provinces = [];
+	for (const [code, els] of codeToPathEls.entries()) {
+		// Some maps may have duplicates; de-duplicate elements by reference
+		const uniqueEls = Array.from(new Set(els));
+		const prov = new Province(code, code, code, uniqueEls[0], uniqueEls);
 		provinces.push(prov);
 	}
 
@@ -47,7 +61,19 @@ export async function loadSvgAndExtractProvinces(objectEl) {
 	const bboxes = new Map();
 	for (const p of provinces) {
 		try {
-			bboxes.set(p.id, p.pathEl.getBBox());
+			// merge bbox of multiparts by union
+			let union = null;
+			for (const el of p.pathEls) {
+				const bb = el.getBBox();
+				if (!union) union = { ...bb };
+				else union = {
+					x: Math.min(union.x, bb.x),
+					y: Math.min(union.y, bb.y),
+					width: Math.max(union.x + union.width, bb.x + bb.width) - Math.min(union.x, bb.x),
+					height: Math.max(union.y + union.height, bb.y + bb.height) - Math.min(union.y, bb.y),
+				};
+			}
+			bboxes.set(p.id, union || { x: 0, y: 0, width: 0, height: 0 });
 		} catch {
 			bboxes.set(p.id, { x: 0, y: 0, width: 0, height: 0 });
 		}
@@ -92,18 +118,20 @@ function injectInteractionStyles(svgDoc, svgRoot) {
 
 export function wireProvinceInteractions(provinces, handlers) {
 	for (const p of provinces) {
-		p.pathEl.style.cursor = 'pointer';
-		p.pathEl.addEventListener('mouseenter', () => {
-			p.pathEl.classList.add('province-hover');
-			handlers.onHover && handlers.onHover(p);
-		});
-		p.pathEl.addEventListener('mouseleave', () => {
-			p.pathEl.classList.remove('province-hover');
-			handlers.onUnhover && handlers.onUnhover(p);
-		});
-		p.pathEl.addEventListener('click', (ev) => {
-			ev.stopPropagation();
-			handlers.onClick && handlers.onClick(p);
-		});
+		for (const el of p.pathEls) {
+			el.style.cursor = 'pointer';
+			el.addEventListener('mouseenter', () => {
+				for (const e of p.pathEls) e.classList.add('province-hover');
+				handlers.onHover && handlers.onHover(p);
+			});
+			el.addEventListener('mouseleave', () => {
+				for (const e of p.pathEls) e.classList.remove('province-hover');
+				handlers.onUnhover && handlers.onUnhover(p);
+			});
+			el.addEventListener('click', (ev) => {
+				ev.stopPropagation();
+				handlers.onClick && handlers.onClick(p);
+			});
+		}
 	}
 }

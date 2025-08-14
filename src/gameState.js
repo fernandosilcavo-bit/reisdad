@@ -1,9 +1,10 @@
 export class Province {
-	constructor(id, isoCode, name, pathEl) {
+	constructor(id, isoCode, name, pathEl, pathEls) {
 		this.id = id;
-		this.isoCode = isoCode || null; // country code from data-iso if present
+		this.isoCode = isoCode || null; // province/country code
 		this.name = name || isoCode || id;
-		this.pathEl = pathEl; // SVGPathElement
+		this.pathEl = pathEl; // representative SVGPathElement
+		this.pathEls = Array.isArray(pathEls) && pathEls.length ? pathEls : (pathEl ? [pathEl] : []);
 		this.ownerId = null;
 		this.army = 0;
 		this.economy = 1; // produces gold per turn baseline
@@ -57,7 +58,13 @@ export class GameState {
 		}
 		province.ownerId = countryId;
 		country.provinces.add(provinceId);
-		if (province.pathEl) province.pathEl.style.fill = country.color;
+		if (province.pathEls && province.pathEls.length) {
+			for (const el of province.pathEls) {
+				if (el && el.style) el.style.fill = country.color;
+			}
+		} else if (province.pathEl) {
+			province.pathEl.style.fill = country.color;
+		}
 	}
 
 	collectIncome() {
