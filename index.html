@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>AoH2-Style Strategy - SVG Map</title>
+	<link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+	<div id="app-root">
+		<div id="topbar">
+			<div id="turn-info">Tur: 1 • Yıl: 1444</div>
+			<div id="player-info">Seçim bekleniyor…</div>
+			<button id="end-turn-btn" disabled>Tur Sonu</button>
+			<button id="save-btn" disabled>Kaydet</button>
+			<button id="load-btn">Yükle</button>
+		</div>
+
+		<div id="left-panel">
+			<h3>Seçili Bölge</h3>
+			<div id="selected-province">—</div>
+			<div id="selected-owner">—</div>
+			<div id="selected-stats">—</div>
+			<div class="actions">
+				<button id="recruit-btn" disabled>Birim Ekle</button>
+				<button id="improve-econ-btn" disabled>Ekonomi Yatırımı</button>
+				<button id="move-mode-btn" disabled>Ordu Taşı</button>
+				<button id="declare-war-btn" disabled>Savaş İlan Et</button>
+			</div>
+		</div>
+
+		<div id="right-panel">
+			<h3>Diplomasi</h3>
+			<div id="diplomacy-view">—</div>
+		</div>
+
+		<div id="map-wrapper">
+			<object id="svgMap" data="./map.svg" type="image/svg+xml"></object>
+		</div>
+	</div>
+
+	<div id="overlay">
+		<div class="modal">
+			<h2>Ulusunu Seç</h2>
+			<p>Haritadan tıklayarak veya listeden seçerek başlayın.</p>
+			<div class="row">
+				<select id="country-select"></select>
+				<button id="auto-pick">Rastgele</button>
+			</div>
+			<div class="actions">
+				<button id="start-game">Başla</button>
+				<button id="cancel-select">İptal</button>
+			</div>
+		</div>
+	</div>
+
+	<script type="module" src="./src/main.js"></script>
+</body>
+</html>
