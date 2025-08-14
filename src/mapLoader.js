@@ -24,21 +24,27 @@ export async function loadSvgAndExtractProvinces(objectEl) {
 
 	injectInteractionStyles(svgDoc, svgRoot);
 
-	// Collect all paths and infer codes from attributes (data-nuts, nuts_id, NUTS_ID) or id using NUTS-like pattern
+	// Collect all paths and infer codes from attributes
 	const allPaths = [...svgRoot.querySelectorAll('path')];
 	const codeToPathEls = new Map();
-	const codeRegex = /([A-Z]{2}[A-Z0-9]{1,3})/; // e.g., TR10, EL30, UKI3, DE111
+	const idRegex = /([A-Z]{2}[A-Z0-9]{1,3})/; // TR10, GRC, EL30, UKI3
 	for (const path of allPaths) {
 		if (path.closest('#graticule') || path.closest('#context')) continue;
-		let code = (path.getAttribute('data-nuts') || path.getAttribute('nuts_id') || path.getAttribute('NUTS_ID') || '').trim().toUpperCase();
+		let code = (
+			path.getAttribute('data-iso') ||
+			path.getAttribute('data-nuts') ||
+			path.getAttribute('nuts_id') ||
+			path.getAttribute('NUTS_ID') ||
+			''
+		).trim().toUpperCase();
 		if (!code) {
 			const pid = (path.getAttribute('id') || '').toUpperCase();
-			const m = pid.match(codeRegex);
+			const m = pid.match(idRegex);
 			if (m) code = m[1];
 		}
 		if (!code) continue;
-		// Exclude pure country polygons like ISO-3 if present (we only want subunits/cities). Heuristic: code length 3-5 and starts with letters
-		if (code.length < 3 || code.length > 5) continue;
+		// Accept codes 2-5 chars starting with letters only; avoid unrelated helpers
+		if (code.length < 2 || code.length > 5) continue;
 		if (!/^[A-Z]{2}/.test(code)) continue;
 		if (!codeToPathEls.has(code)) codeToPathEls.set(code, []);
 		codeToPathEls.get(code).push(path);
@@ -47,8 +53,7 @@ export async function loadSvgAndExtractProvinces(objectEl) {
 	const provinces = [];
 	for (const [code, els] of codeToPathEls.entries()) {
 		const uniqueEls = Array.from(new Set(els));
-		const countryRoot = code.slice(0, 2);
-		const prov = new Province(code, countryRoot, code, uniqueEls[0], uniqueEls);
+		const prov = new Province(code, code, code, uniqueEls[0], uniqueEls);
 		provinces.push(prov);
 	}
 
